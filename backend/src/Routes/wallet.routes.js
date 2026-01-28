@@ -1,15 +1,11 @@
 import express from 'express';
-
+import {getUserBalance , depositMoney} from '../controllers/wallet.controller.js'
 const walletRouter = express.Router();
 
 
-walletRouter.get("/", (req, res) => {
-  res.json({ balance: 10000 });
-});
+walletRouter.get("/", getUserBalance);
 
-walletRouter.post("/add", (req, res) => {
-  res.json({ message: "Money added" });
-});
+walletRouter.post("/add", depositMoney);
 
 
 export default walletRouter;

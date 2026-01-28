@@ -21,7 +21,7 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRouter);
 app.use('/api/users',userRouter);
-app.use('/api/wallet', walletRouter);
+// app.use('/api/wallet', walletRouter);  Review this again 
 app.use('/api/market', marketRouter);
 app.use('/api/order' , orderRouter); 
 
