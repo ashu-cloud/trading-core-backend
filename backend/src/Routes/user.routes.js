@@ -1,15 +1,13 @@
 import express from 'express';
+import {updateUserProfile , getUserProfile , updateUserPassword} from '../controllers/user.controller.js'
 
 const userRouter = express.Router();
 
-userRouter.get('/profile', (req, res) => {
-  res.json({ message: "User profile" });
-});
+userRouter.get('/profile', getUserProfile);
 
-userRouter.patch('/profile', (req, res) => {
-  res.json({ message: "Profile updated" });
-});
+userRouter.patch('/profile', updateUserProfile);
 
+userRouter.patch('/password', updateUserPassword);
 
 
 export default userRouter;

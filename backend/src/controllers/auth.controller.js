@@ -71,7 +71,8 @@ export const login = async(req , res)=>{
             })
         }
 
-        const user = await User.findOne({email});
+        const user = await User.findOne({ email }).select("+password");
+
         if(!user){
             return res.status(400).json({
                 success:false,
@@ -99,7 +100,7 @@ export const login = async(req , res)=>{
             user :{
                 _id: user._id,
                 email : email,
-                name : name
+                name : user.name
             }
         })
 
