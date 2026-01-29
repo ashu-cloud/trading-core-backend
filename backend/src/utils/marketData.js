@@ -1,9 +1,12 @@
-import axios from 'axios'
+import dotenv from 'dotenv';
+dotenv.config();
+import axios from 'axios';
 
 const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
 
 const API_KEY = process.env.FINNHUB_API_KEY;
 
+console.log("FINNHUB API KEY:" , API_KEY);
 
 export const fetchStockPrice = async(symbol)=>{
         const response = await axios.get(

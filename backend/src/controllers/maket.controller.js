@@ -33,7 +33,7 @@ export const getStockPrice = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch stock price"
+      message:` Failed to fetch stock price ${err.message}`
     });
   }
 };
@@ -76,7 +76,7 @@ export const getAllStocks = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch available stocks"
+      message: `Failed to fetch available stocks ${err.message}`
     });
 }
 };
