@@ -9,7 +9,7 @@ export const fetchStockPrice = async(symbol)=>{
         const response = await axios.get(
             `${FINNHUB_BASE_URL}/quote`,{
                 params : {
-                    symbols,
+                    symbol,
                     token : API_KEY,
                 }
             }
@@ -18,3 +18,17 @@ export const fetchStockPrice = async(symbol)=>{
         
         return response.data.c;
 };
+
+
+export const fetchAllStocks = async (exchange = "US")=>{
+    const response  = await axios.get(
+        `${FINNHUB_BASE_URL}/stock/symbol`,{
+            params:{
+                exchange ,
+                token : API_KEY,
+            }
+        }
+    )
+
+    return response.data;
+}
