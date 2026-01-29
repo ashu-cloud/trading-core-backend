@@ -1,6 +1,6 @@
-import Portfolio from '../models/portfolio.model.js';
 import Order from '../models/order.model.js';
-import {fetchStockPrice , fetchAllStocks} from '../utils/marketData.js';
+import User from '../models/user.model.js';
+import {fetchStockPrice } from '../utils/marketData.js';
 
 
 export const getUserOrders = async(req, res)=>{
@@ -19,7 +19,7 @@ export const getUserOrders = async(req, res)=>{
 
     }catch(err){
         console.log("GetUserORders error",err.message);
-        res.statu(500).json({
+        res.status(500).json({
             success:false,
             message : "Unable to fetch Your Orders"
         })
@@ -34,14 +34,7 @@ export const cancelUserOrder = async(req , res)=>{
         const { orderId } = req.params;
         const userId = req.user._id;
 
-        if(!userId){
-            return res.status(404).json({
-                success:false,
-                message : "User not logged In"
-            })
-        }
-
-        const order = await Order.findById({orderId});
+        const order = await Order.findById(orderId);
 
         if(!order){
             return res.status(404).json({
@@ -62,18 +55,31 @@ export const cancelUserOrder = async(req , res)=>{
         if(order.status === "FILLED"){
             return res.status(400).json({
                 success:false,
-                message: "Filled orderes cannot be cancelled"
+                message: "Filled orders cannot be cancelled"
             })
         }
 
-        // Cancel Order
-        await Order.findByIdAndDelete(orderId);
+        const refundAmount = order.price * order.quantity;
 
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+            success: false,
+            message: "User not found"
+            });
+        }
+
+        user.wallet_balance += refundAmount;
+        await user.save();
+
+        // 5️⃣ Cancel order (soft cancel recommended)
+        order.status = "CANCELLED";
+        await order.save();
 
         res.status(200).json({
-            success:true,
-            message : "Order successfully Deleted"
-        })
+        success: true,
+        message: "Order cancelled and wallet refunded"
+        });
 
     }catch(err){
         console.log("Cancel User Order Error" , err.message);
@@ -88,7 +94,8 @@ export const cancelUserOrder = async(req , res)=>{
 export const placeUserOrder = async(req , res)=>{
     try{
 
-        const user = req.user._id; // get authenticated user from middleware 
+        const userId = req.user._id; // get authenticated user from middleware 
+        const user = await User.findById(userId);
 
         if(!user){
             return res.status(401).json({
@@ -106,24 +113,56 @@ export const placeUserOrder = async(req , res)=>{
             })
         }
 
-        if(!quantity || quantity < 0){
+        if(!quantity || quantity <= 0){
             return res.status(400).json({
                 success:false,
                 message : "Quantity of the selected Stock is 0"
             })
         }
 
-        // check whether the stock is available 
+        const stockSymbol = symbol.toUpperCase();
+        const price = await fetchStockPrice(stockSymbol);
+        if (!Number.isFinite(price) || price <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid stock price"
+            });
+        }
 
 
-        // fetch the price of the stock
 
-        // check whether the User can buy the given quatity of stock or not
+        const orderValue = price*quantity;
 
+        if(user.wallet_balance < orderValue){
+            return res.status(400).json({
+                success:false,
+                message : "Insufficient Wallet Balance"
+            })
+        }
+        
+        const order = await Order.create({
+            userId,
+            stockSymbol,
+            quantity,
+            price,
+            type :"BUY",
+            status:"OPEN"
+        })
 
-        // if yes then User can buy the stock
+        user.wallet_balance -= orderValue;
+        await user.save();
+        
+        res.status(201).json({
+            success:true,
+            order:{
+                id: order._id,
+                stockSymbol,
+                quantity,
+                price,
+                status: order.status
 
-
+            }
+        })
 
 
     }catch(err){

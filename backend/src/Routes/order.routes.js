@@ -1,18 +1,13 @@
 import express from 'express';
+import {getUserOrders , cancelUserOrder , placeUserOrder} from '../controllers/order.controller.js';
 
 const orderRouter = express.Router();
 
-orderRouter.post('/', (req, res) => {
-  res.json({ message: "Place order" });
-});
+orderRouter.post('/', placeUserOrder);
 
-orderRouter.get('/my', (req, res) => {
-  res.json({ message: "Get my orders" });
-});
+orderRouter.get('/my', getUserOrders);
 
-orderRouter.delete('/:orderId', (req, res) => {
-  res.json({ message: "Cancel order" });
-});
+orderRouter.delete('/:orderId', cancelUserOrder);
 
 
 
