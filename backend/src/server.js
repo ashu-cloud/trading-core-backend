@@ -9,6 +9,7 @@ import portfolioRouter from '../src/Routes/portfolio.routes.js';
 import marketRouter from '../src/Routes/market.router.js';
 import orderRouter from '../src/Routes/order.routes.js';
 import connectDB from '../src/utils/db.js';
+import {errorHandler} from '../src/middlewares/error.middleware.js';
 
 const app = express();
 const PORT = process.env.PORT;
@@ -21,6 +22,7 @@ app.use(express.urlencoded({extended : true}));
 app.use(cookieParser());
 
 
+
 app.use("/api/auth", authRouter);
 app.use('/api/users',userRouter);
 // app.use('/api/wallet', walletRouter);  Review this again 
@@ -29,6 +31,7 @@ app.use('/api/order' , orderRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/user/wallet', walletRouter);
 
+app.use(errorHandler);
 
 app.listen(PORT , ()=>{
     console.log("app running ");
