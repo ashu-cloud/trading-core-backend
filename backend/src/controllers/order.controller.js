@@ -1,5 +1,6 @@
 import Order from '../models/order.model.js';
 import User from '../models/user.model.js';
+import {executeBuyOrder} from '../utils/orderExecution.js';
 import {fetchStockPrice } from '../utils/marketData.js';
 
 
@@ -151,17 +152,18 @@ export const placeUserOrder = async(req , res)=>{
 
         user.wallet_balance -= orderValue;
         await user.save();
-        
-        res.status(201).json({
-            success:true,
-            order:{
-                id: order._id,
-                stockSymbol,
-                quantity,
-                price,
-                status: order.status
 
-            }
+        const trade = await executeBuyOrder({order, userId});
+
+
+
+        res.status(201).json({
+            success: true,
+            message: "Order  Placed and executed successfully",
+            orderId:order._id,
+            trade : trade._id,
+
+           
         })
 
 
