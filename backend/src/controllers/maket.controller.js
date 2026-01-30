@@ -1,5 +1,5 @@
 import {fetchStockPrice , fetchAllStocks} from '../utils/marketData.js';
-
+import axios from 'axios';
 
 export const getStockPrice = async (req, res) => {
   try {
@@ -79,4 +79,43 @@ export const getAllStocks = async (req, res) => {
       message: `Failed to fetch available stocks ${err.message}`
     });
 }
+};
+
+
+export const getStockHistory = async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    const response = await axios.get(
+      "https://finnhub.io/api/v1/stock/candle",
+      {
+        params: {
+          symbol,
+          resolution: "D",
+          from: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 30,
+          to: Math.floor(Date.now() / 1000),
+          token: process.env.FINNHUB_API_KEY
+        }
+      }
+    );
+
+    if (response.data.s !== "ok") {
+      return res.status(404).json({
+        success: false,
+        message: "No historical data"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      timestamps: response.data.t,
+      prices: response.data.c
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch stock history"
+    });
+  }
 };

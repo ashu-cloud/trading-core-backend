@@ -44,3 +44,33 @@ export const getPortfolio = async (req, res) => {
     });
   }
 };
+
+
+export const getPortfolioAllocation = async (req, res) => {
+  try {
+    const portfolio = await Portfolio.findOne({ user: req.user._id });
+
+    if (!portfolio || portfolio.holding.length === 0) {
+      return res.status(200).json({
+        success: true,
+        allocation: []
+      });
+    }
+
+    const allocation = portfolio.holding.map(h => ({
+      stockSymbol: h.stockSymbol,
+      quantity: h.quantity
+    }));
+
+    res.status(200).json({
+      success: true,
+      allocation
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch allocation"
+    });
+  }
+};
