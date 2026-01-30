@@ -6,7 +6,7 @@ import Portfolio from '../models/portfolio.model.js';
  * - wallet is already deducted
  * - order exists and is OPEN
  */
-export const executeBuyOrder = async ({ order, userId }) => {
+export const executeBuyOrder = async ({ order, userId , session }) => {
   const { stockSymbol, price, quantity } = order;
 
   // 1️⃣ Create trade (execution record)
@@ -15,16 +15,16 @@ export const executeBuyOrder = async ({ order, userId }) => {
     stockSymbol,
     price,
     quantity
-  });
+  },{session});
 
   // 2️⃣ Fetch or create portfolio
-  let portfolio = await Portfolio.findOne({ user: userId });
+  let portfolio = await Portfolio.findOne({ user: userId }).session(session);
 
   if (!portfolio) {
     portfolio = await Portfolio.create({
       user: userId,
       holding: []
-    });
+    }, {session});
   }
 
   // 3️⃣ Update holdings
@@ -48,11 +48,11 @@ export const executeBuyOrder = async ({ order, userId }) => {
     });
   }
 
-  await portfolio.save();
+  await portfolio.save({session});
 
   // 4️⃣ Mark order FILLED
   order.status = "FILLED";
-  await order.save();
+  await order.save({session});
 
   return trade;
 };

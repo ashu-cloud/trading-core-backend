@@ -3,6 +3,7 @@ import User from '../models/user.model.js';
 import Portfolio from '../models/portfolio.model.js';
 import {executeBuyOrder} from '../utils/orderExecution.js';
 import {fetchStockPrice } from '../utils/marketData.js';
+import mongoose from "mongoose";
 
 
 export const getUserOrders = async(req, res)=>{
@@ -179,8 +180,9 @@ export const placeUserOrder = async(req , res)=>{
 
 
 export const placeSellOrder = async(req, res)=>{
+    const session = await mongoose.startSession();
     try{
-
+        session.startTransaction();
         const userId = req.user._id;
 
         const{symbol , quantity}  = req.body;
@@ -240,6 +242,9 @@ export const placeSellOrder = async(req, res)=>{
         user.wallet_balance += sellValue;
         await user.save();
 
+        await session.commitTransaction();
+        await session.endSession();
+
         res.status(201).json({
             success:true,
             message: "Sell Order executed",
@@ -248,6 +253,8 @@ export const placeSellOrder = async(req, res)=>{
         })
 
     }catch(err){
+        await session.abortTransaction();
+        session.endSession();
         console.log("Sell Order error : ", err.message)
         res.status(500).json({
             success:false,
