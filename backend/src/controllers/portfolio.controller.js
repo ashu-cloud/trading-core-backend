@@ -3,30 +3,35 @@ import { fetchStockPrice } from "../utils/marketData.js";
 
 export const getPortfolio = async (req, res) => {
   try {
-    const portfolio = await Portfolio.findOne({ user: req.user._id });
+    const userId = req.user._id;
 
-    if (!portfolio || portfolio.holding.length === 0) {
+    const portfolio = await Portfolio.findOne({ user: userId });
+
+    if (!portfolio) {
       return res.status(200).json({
         success: true,
         holdings: [],
-        totalPnL: 0
+        totalUnrealizedPnl: 0
       });
     }
 
-    let totalPnL = 0;
+    let totalUnrealizedPnl = 0;
 
     const enrichedHoldings = await Promise.all(
       portfolio.holding.map(async (h) => {
         const currentPrice = await fetchStockPrice(h.stockSymbol);
-        const pnl = (currentPrice - h.avgPrice) * h.quantity;
-        totalPnL += pnl;
+        const unrealizedPnl =
+          (currentPrice - h.avgPrice) * h.quantity;
+
+        totalUnrealizedPnl += unrealizedPnl;
 
         return {
           stockSymbol: h.stockSymbol,
           quantity: h.quantity,
           avgPrice: h.avgPrice,
           currentPrice,
-          pnl
+          unrealizedPnl,
+          realizedPnl: h.realizedPnl
         };
       })
     );
@@ -34,13 +39,14 @@ export const getPortfolio = async (req, res) => {
     res.status(200).json({
       success: true,
       holdings: enrichedHoldings,
-      totalPnL
+      totalUnrealizedPnl
     });
 
   } catch (err) {
+    console.error("GetPortfolio error:", err.message);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch portfolio"
+      message: "Unable to fetch portfolio"
     });
   }
 };
