@@ -1,9 +1,11 @@
 import express from 'express';
-import {getUserOrders , cancelUserOrder , placeUserOrder} from '../controllers/order.controller.js';
+import {getUserOrders , cancelUserOrder , placeUserOrder, placeSellOrder} from '../controllers/order.controller.js';
 
 const orderRouter = express.Router();
 
-orderRouter.post('/', placeUserOrder);
+orderRouter.post('/buy', placeUserOrder);
+
+orderRouter.post('/sell' , placeSellOrder);
 
 orderRouter.get('/my', getUserOrders);
 

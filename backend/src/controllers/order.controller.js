@@ -1,5 +1,6 @@
 import Order from '../models/order.model.js';
 import User from '../models/user.model.js';
+import Portfolio from '../models/portfolio.model.js';
 import {executeBuyOrder} from '../utils/orderExecution.js';
 import {fetchStockPrice } from '../utils/marketData.js';
 
@@ -172,6 +173,85 @@ export const placeUserOrder = async(req , res)=>{
         res.status(500).json({
             success:false,
             message:"Unable to place Order"
+        })
+    }
+}
+
+
+export const placeSellOrder = async(req, res)=>{
+    try{
+
+        const userId = req.user._id;
+
+        const{symbol , quantity}  = req.body;
+
+        if(!symbol || !quantity || quantity <= 0){
+            return res.status(400).json({
+                sucess:false,
+                message : "Symbol or Valid quantity not found"
+            })
+        }
+
+        const stockSymbol = symbol.toUpperCase();
+
+        const portfolio = await Portfolio.findOne({user : userId});
+
+        if(!portfolio){
+            return res.status(400).json({
+                success:false,
+                message : "No Holdings found"
+            })
+        }
+
+        const holding = portfolio.holding.find(
+            h => h.stockSymbol === stockSymbol
+        );
+
+        if(!holding || holding.quantity < quantity){
+            return res.status(400).json({
+                success:false,
+                message: "Insufficient Holdings"
+            })
+        }
+
+        const price = await fetchStockPrice(stockSymbol);
+        const sellValue = price*quantity;
+
+        const order = await Order.create({
+            userId,
+            stockSymbol,
+            quantity,
+            price,
+            type:"SELL",
+            status :"FILLED"
+        })
+
+        // Update Portfolio
+        holding.quantity -= quantity;
+        if(holding.quantity === 0){
+            portfolio.holding = portfolio.holding.filter(
+                h=> h.stockSymbol !== stockSymbol
+            )
+        }
+        await portfolio.save();
+
+        // Credit Wallet
+        const user = User.findById(userId);
+        user.wallet_balance += sellValue;
+        await user.save();
+
+        res.status(201).json({
+            success:true,
+            message: "Sell Order executed",
+            orderId : order._id,
+            amountCredited : sellValue
+        })
+
+    }catch(err){
+        console.log("Sell Order error : ", err.message)
+        res.status(500).json({
+            success:false,
+            message : "Failed to place Sell order"
         })
     }
 }
