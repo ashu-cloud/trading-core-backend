@@ -61,7 +61,16 @@ export const placeUserOrder = async (req, res) => {
     user.wallet_balance -= orderValue;
     await user.save({ session });
 
+    
     await executeBuyOrder({ buyOrder: order, session });
+
+    order.auditLogs.push({
+        action: "CREATED",
+        quantity,
+        price
+        });
+    await order.save({ session });
+
 
     await session.commitTransaction();
 
@@ -112,6 +121,14 @@ export const placeSellOrder = async (req, res) => {
       type: "SELL"
     }], { session });
 
+    order.auditLogs.push({
+        action: "CREATED",
+        quantity,
+        price
+        });
+    await order.save({ session });
+
+
     await session.commitTransaction();
 
     res.status(201).json({
@@ -149,7 +166,13 @@ export const cancelUserOrder = async (req, res) => {
     await user.save();
 
     order.status = "CANCELLED";
+    order.auditLogs.push({
+    action: "CANCELLED",
+    quantity: order.quantity - order.filledQuantity,
+    price: order.price
+    });
     await order.save();
+
 
     res.status(200).json({ success: true, message: "Order cancelled" });
 
