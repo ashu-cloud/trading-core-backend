@@ -22,18 +22,39 @@ const orderSchema = new mongoose.Schema({
         type : Number,
         required : true
     },
-    status:{
-        type : String,
-        enum : ["OPEN" , "PARTIAL" ,"FILLED"]
+    status: {
+        type: String,
+        enum: ["OPEN", "PARTIAL", "FILLED", "CANCELLED"],
+        default: "OPEN"
     },
-    filledQuantity:{
-        type : Number,
-        default : 0
+    filledQuantity: {
+        type: Number,
+        default: 0
     },
+
     orderType:{
         type : String,
         enum : ["MARKET" , "LIMIT"],
         default : "LIMIT"
+    },
+    auditLogs: [
+    {
+        action: {
+        type: String,
+        enum: ["CREATED", "PARTIAL_FILL", "FILLED", "CANCELLED"],
+        required: true
+        },
+        quantity: Number,
+        price: Number,
+        timestamp: {
+        type: Date,
+        default: Date.now
+        }
+    }
+    ],
+    isDeleted: {
+    type: Boolean,
+    default: false
     }
 
 },{ timestamps : true});

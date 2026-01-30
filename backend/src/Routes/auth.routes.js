@@ -4,9 +4,9 @@ import {protect} from '../middlewares/auth.middleware.js';
 const authRouter = express.Router();
 
 
-authRouter.post('/sign-up', protect, SignUp);
+authRouter.post('/sign-up', SignUp);
 
-authRouter.post('/login',protect, login);
+authRouter.post('/login', login);
 
 authRouter.get('/me',protect, getMe);
 

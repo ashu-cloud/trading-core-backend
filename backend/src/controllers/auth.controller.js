@@ -4,7 +4,16 @@ import jwt from 'jsonwebtoken';
 
 export const SignUp  = async (req , res)=>{
     try{
+            if (!req.body) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Request body missing"
+            });
+            }
+
         const {name , email , password, wallet_balance=0} = req.body;
+  
+
 
         if(!name || !email || !password){
             return res.status(400).json({
@@ -100,7 +109,8 @@ export const login = async(req , res)=>{
             user :{
                 _id: user._id,
                 email : email,
-                name : user.name
+                name : user.name,
+                token: token
             }
         })
 
