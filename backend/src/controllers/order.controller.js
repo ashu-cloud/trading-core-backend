@@ -119,8 +119,8 @@ export const placeSellOrder = async (req, res) => {
   try {
     session.startTransaction();
 
-    const { symbol, quantity } = req.body;
     const userId = req.user._id;
+    const { symbol, quantity } = req.body;
 
     if (!symbol || !quantity || quantity <= 0) {
       return res.status(400).json({
@@ -131,8 +131,10 @@ export const placeSellOrder = async (req, res) => {
 
     const stockSymbol = symbol.toUpperCase();
 
-    // 1️⃣ Fetch portfolio
-    const portfolio = await Portfolio.findOne({ user: userId }).session(session);
+    const portfolio = await Portfolio
+      .findOne({ user: userId })
+      .session(session);
+
     if (!portfolio) {
       return res.status(400).json({
         success: false,
@@ -151,41 +153,27 @@ export const placeSellOrder = async (req, res) => {
       });
     }
 
-    // 2️⃣ Fetch live price
     const price = await fetchStockPrice(stockSymbol);
-    if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid stock price"
-      });
-    }
-
-    // 3️⃣ Calculate values
     const sellValue = price * quantity;
-    const realizedPnl = (price - holding.avgPrice) * quantity;
 
-    // 4️⃣ Create SELL order
-    const [order] = await Order.create(
-      [{
-        userId,
-        stockSymbol,
+    // 1️⃣ Create SELL order (FILLED)
+    const order = await Order.create([{
+      userId,
+      stockSymbol,
+      quantity,
+      price,
+      type: "SELL",
+      status: "FILLED",
+      filledQuantity: quantity,
+      auditLogs: [{
+        action: "FILLED",
         quantity,
-        price,
-        type: "SELL",
-        status: "FILLED",
-        auditLogs: [{
-          action: "SELL_EXECUTED",
-          quantity,
-          price,
-          timestamp: new Date()
-        }]
-      }],
-      { session }
-    );
+        price
+      }]
+    }], { session });
 
-    // 5️⃣ Update portfolio
+    // 2️⃣ Update portfolio
     holding.quantity -= quantity;
-    holding.realizedPnl = (holding.realizedPnl || 0) + realizedPnl;
 
     if (holding.quantity === 0) {
       portfolio.holding = portfolio.holding.filter(
@@ -195,19 +183,17 @@ export const placeSellOrder = async (req, res) => {
 
     await portfolio.save({ session });
 
-    // 6️⃣ Credit wallet
+    // 3️⃣ Credit wallet
     const user = await User.findById(userId).session(session);
     user.wallet_balance += sellValue;
     await user.save({ session });
 
-    // 7️⃣ Commit transaction
     await session.commitTransaction();
 
     res.status(201).json({
       success: true,
-      message: "Sell order executed successfully",
-      orderId: order._id,
-      realizedPnl,
+      message: "Sell order executed",
+      orderId: order[0]._id,
       amountCredited: sellValue
     });
 
@@ -368,3 +354,4 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
     session.endSession();
   }
 };
+ 

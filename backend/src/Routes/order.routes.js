@@ -28,7 +28,7 @@ orderRouter.get('/:orderId/logs', protect, async (req, res) => {
 });
 
 
-orderRouter.post('/execute/:orderId', executeBuyOrderAndUpdatePortfolio)
+orderRouter.post('/execute/:orderId', protect,executeBuyOrderAndUpdatePortfolio)
 
 
 
