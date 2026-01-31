@@ -7,7 +7,7 @@ const DB = async()=>{
             `${process.env.MONGODB_URI}/stock-app`
         )
 
-        console.log(`MongoDb Connected ${conn.connection.host}`);
+        console.log(`MongoDb Connected `);
         
 
     }catch(err){

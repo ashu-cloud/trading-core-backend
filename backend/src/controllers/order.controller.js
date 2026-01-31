@@ -44,68 +44,72 @@ export const getUserOrders = async (req, res) => {
 /* ================= PLACE BUY ORDER ================= */
 
 export const placeUserOrder = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
-    session.startTransaction();
-
-    const { symbol, quantity } = req.body;
     const userId = req.user._id;
+    const { symbol, quantity } = req.body;
 
     if (!symbol || !quantity || quantity <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid input" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid symbol or quantity"
+      });
     }
 
     const stockSymbol = symbol.toUpperCase();
     const price = await fetchStockPrice(stockSymbol);
 
     if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid price" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid stock price"
+      });
     }
 
-    const user = await User.findById(userId).session(session);
     const orderValue = price * quantity;
 
+    const user = await User.findById(userId);
     if (user.wallet_balance < orderValue) {
-      return res.status(400).json({ success: false, message: "Insufficient balance" });
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient wallet balance"
+      });
     }
 
-    const [order] = await Order.create([{
+    // 1️⃣ Create OPEN order
+    const order = await Order.create({
       userId,
       stockSymbol,
       quantity,
       price,
-      type: "BUY"
-    }], { session });
-
-    user.wallet_balance -= orderValue;
-    await user.save({ session });
-
-    
-    await executeBuyOrder({ buyOrder: order, session });
-
-    order.auditLogs.push({
+      type: "BUY",
+      status: "OPEN",
+      auditLogs: [{
         action: "CREATED",
         quantity,
-        price
-        });
-    await order.save({ session });
+        price,
+        timestamp: new Date()
+      }]
+    });
 
-
-    await session.commitTransaction();
+    // 2️⃣ Block funds (deduct for now)
+    user.wallet_balance -= orderValue;
+    await user.save();
 
     res.status(201).json({
       success: true,
-      orderId: order._id,
-      status: order.status
+      message: "Buy order placed (OPEN)",
+      orderId: order._id
     });
 
   } catch (err) {
-    await session.abortTransaction();
-    res.status(500).json({ success: false, message: "Order failed" });
-  } finally {
-    session.endSession();
+    console.error("Place BUY error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to place buy order"
+    });
   }
 };
+
 
 /* ================= PLACE SELL ORDER ================= */
 
@@ -230,6 +234,13 @@ export const cancelUserOrder = async (req, res) => {
     if (!order || order.userId.toString() !== req.user._id.toString()) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
+    if (order.status !== "OPEN") {
+      return res.status(400).json({
+        success: false,
+        message: "Only OPEN orders can be cancelled"
+      });
+    } 
+
 
     if (order.status === "FILLED") {
       return res.status(400).json({ success: false, message: "Cannot cancel filled order" });
@@ -255,5 +266,105 @@ export const cancelUserOrder = async (req, res) => {
 
   } catch (err) {
     res.status(500).json({ success: false, message: "Cancel failed" });
+  }
+};
+
+
+
+// Execute Order
+export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const { orderId } = req.params;
+    const userId = req.user._id;
+
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    if (order.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    if (order.status !== "OPEN") {
+      return res.status(400).json({
+        success: false,
+        message: "Order cannot be executed"
+      });
+    }
+
+    // 1️⃣ Update portfolio
+    let portfolio = await Portfolio.findOne({ user: userId }).session(session);
+
+    if (!portfolio) {
+      portfolio = await Portfolio.create(
+        [{ user: userId, holding: [] }],
+        { session }
+      );
+      portfolio = portfolio[0];
+    }
+
+    const holding = portfolio.holding.find(
+      h => h.stockSymbol === order.stockSymbol
+    );
+
+    if (holding) {
+      const totalQty = holding.quantity + order.quantity;
+      const totalCost =
+        holding.quantity * holding.avgPrice +
+        order.quantity * order.price;
+
+      holding.quantity = totalQty;
+      holding.avgPrice = totalCost / totalQty;
+    } else {
+      portfolio.holding.push({
+        stockSymbol: order.stockSymbol,
+        quantity: order.quantity,
+        avgPrice: order.price,
+        realizedPnl: 0
+      });
+    }
+
+    await portfolio.save({ session });
+
+    // 2️⃣ Mark order FILLED
+    order.status = "FILLED";
+    order.auditLogs.push({
+      action: "FILLED",
+      quantity: order.quantity,
+      price: order.price,
+      timestamp: new Date()
+    });
+
+    await order.save({ session });
+
+    await session.commitTransaction();
+
+    res.status(200).json({
+      success: true,
+      message: "Order executed successfully"
+    });
+
+  } catch (err) {
+    await session.abortTransaction();
+    console.error("Execute BUY error:", err.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Order execution failed"
+    });
+  } finally {
+    session.endSession();
   }
 };
