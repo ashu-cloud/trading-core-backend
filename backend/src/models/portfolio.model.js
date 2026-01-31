@@ -24,15 +24,3 @@ const Portfolio = mongoose.model("Portfolio", portfolioSchema);
 
 export default Portfolio;
 
-
-
-
-
-// Respond with Pnl (for frontend )
-// res.status(201).json({
-//   success: true,
-//   message: "Sell order executed",
-//   orderId: order[0]._id,
-//   amountCredited: sellValue,
-//   realizedPnL
-// });

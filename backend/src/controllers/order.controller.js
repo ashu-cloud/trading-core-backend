@@ -156,6 +156,9 @@ export const placeSellOrder = async (req, res) => {
     const price = await fetchStockPrice(stockSymbol);
     const sellValue = price * quantity;
 
+    const realizedPnL = (price - holding.avgPrice) * quantity;
+
+
     // 1️⃣ Create SELL order (FILLED)
     const order = await Order.create([{
       userId,
@@ -194,7 +197,8 @@ export const placeSellOrder = async (req, res) => {
       success: true,
       message: "Sell order executed",
       orderId: order[0]._id,
-      amountCredited: sellValue
+      amountCredited: sellValue,
+      realizedPnL
     });
 
   } catch (err) {

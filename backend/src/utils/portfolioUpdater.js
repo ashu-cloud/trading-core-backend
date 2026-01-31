@@ -1,4 +1,5 @@
 // Update the Portfolio After Trades (not Order);
+import Portfolio from '../models/portfolio.model.js';
 
 export const updatePortfolioAfterTrade = async ({
   userId,
@@ -30,6 +31,9 @@ export const updatePortfolioAfterTrade = async ({
       avgPrice: price
     });
   }
+
+  portfolio.realizedPnL += realizedPnL;
+
 
   await portfolio.save({ session });
 };
