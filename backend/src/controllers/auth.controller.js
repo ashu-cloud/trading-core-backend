@@ -131,3 +131,24 @@ export const getMe = async (req , res)=>{
 }
 
 
+
+export const logout = async(req , res)=>{
+    try{
+
+        res.clearCookie("token");
+
+        return res.status(200).json({
+            success:true,
+            message : "User logged out successfully "
+        });
+
+
+    }catch(err){
+        console.log('Not able to logout due to :' , err.message);
+        return res.status(500).json({
+            success:false,
+            message : "Not able to Logout "
+        })
+    }
+}
+
