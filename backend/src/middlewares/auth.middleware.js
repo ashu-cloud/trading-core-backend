@@ -5,12 +5,12 @@ export const protect = async (req, res, next) => {
     try {
         let token;
 
-        // FIXED: Check header safely
+        // FIXED: Check if header exists before splitting
         if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
             token = req.headers.authorization.split(" ")[1];
         }
-        
-        // FIXED: Check cookies (plural) if header not found
+
+        // FIXED: Use req.cookies (plural) and check safely
         if (!token && req.cookies && req.cookies.token) {
             token = req.cookies.token;
         }
@@ -23,15 +23,11 @@ export const protect = async (req, res, next) => {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+        // ... rest of the code is fine
         const user = await User.findById(decoded.id).select("-password");
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "User not Found"
-            });
+        if(!user){
+             return res.status(401).json({ success:false, message: "User not Found" });
         }
-
         req.user = user;
         next();
 

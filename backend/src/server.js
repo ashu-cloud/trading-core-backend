@@ -1,6 +1,7 @@
 import './config/env.js';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import authRouter from '../src/Routes/auth.routes.js';
 import userRouter from '../src/Routes/user.routes.js';
 import walletRouter from '../src/Routes/wallet.routes.js';
@@ -15,6 +16,15 @@ const PORT = process.env.PORT;
 
 // Connect DB;
 await connectDB();
+
+// This MUST come before your routes
+app.use(cors({
+  origin: "http://localhost:5173", // URL of your React Frontend
+  credentials: true,               // Essential for cookies to work
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 
 app.use(express.json());
 app.use(express.urlencoded({extended : true}));
