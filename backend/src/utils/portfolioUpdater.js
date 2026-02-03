@@ -6,7 +6,8 @@ export const updatePortfolioAfterTrade = async ({
   stockSymbol,
   quantity,
   price,
-  session
+  session,
+  realizedPnL = 0
 }) => {
   let portfolio = await Portfolio.findOne({ user: userId }).session(session);
 
