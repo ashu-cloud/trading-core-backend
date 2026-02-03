@@ -1,40 +1,44 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/user.model.js';
 
-export const protect = async (req, res, next) => {
-    try {
+export const protect = async (req , res, next)=>{
+    try{
         let token;
-
-        // FIXED: Check if header exists before splitting
-        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+        
+        // 1. Try to get token from Cookies (Safe check)
+        if (req.cookies && req.cookies.token) {
+            token = req.cookies.token;
+        }
+        // 2. Try to get from Header (Safe check)
+        else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
             token = req.headers.authorization.split(" ")[1];
         }
 
-        // FIXED: Use req.cookies (plural) and check safely
-        if (!token && req.cookies && req.cookies.token) {
-            token = req.cookies.token;
-        }
-
-        if (!token) {
+        if(!token){
             return res.status(401).json({
-                success: false,
-                message: "Not Authorized"
-            });
+                success:false,
+                message : "Not Authorized - No Token"
+            })
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        // ... rest of the code is fine
         const user = await User.findById(decoded.id).select("-password");
+        
         if(!user){
-             return res.status(401).json({ success:false, message: "User not Found" });
+            return res.status(401).json({
+                success:false,
+                message : "User not Found"
+            })
         }
+
         req.user = user;
         next();
 
-    } catch (err) {
+    }catch(err){
+        // Do not return 500, return 401 for auth failures
         return res.status(401).json({
-            success: false,
+            success:false,
             message: "Invalid or expired Token"
-        });
+        })
     }
-};
+}
