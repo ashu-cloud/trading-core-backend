@@ -22,7 +22,10 @@ await connectDB();
 
 // --- FIX 2: CORS CONFIGURATION ---
 app.use(cors({
-  origin: "http://localhost:5173", // Your Frontend URL
+  origin: [
+    "http://localhost:5173", // Keep this so local development still works
+    "https://trading-core-frontend.onrender.com" 
+  ], 
   credentials: true,               // Essential for cookies
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
