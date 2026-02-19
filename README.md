@@ -1,6 +1,3 @@
-Since you didn't provide the specific URL, I’ve added a placeholder for you. I also took the liberty of adding a **"Quick Start"** section right below it; usually, if someone is looking for a deployment link, they also want to know how to hit the endpoints or see the API docs!
-
-Here is your updated README:
 
 ---
 
@@ -318,4 +315,3 @@ The following enhancements are natural next steps and were consciously scoped ou
 
 ---
 
-Would you like me to generate a **Postman Collection JSON** or a **Swagger/OpenAPI** spec to go along with this deployment link?
