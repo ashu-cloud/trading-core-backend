@@ -41,6 +41,9 @@ app.use('/api/user/wallet', walletRouter);
 
 app.use(errorHandler);
 
+app.get('/', (req, res) => {
+  res.send('Trading Core Backend is up and running!');
+});
 
 app.listen(PORT , ()=>{
     console.log(`app running on port ${PORT}`);
