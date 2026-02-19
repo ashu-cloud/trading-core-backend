@@ -40,7 +40,7 @@ export const SignUp  = async (req , res)=>{
             wallet_balance
         })
 
-        const token = jwt.sign({ id : newUser._id}, process.env.JWT_SECRET,{ expiresIn : "7d"});
+       const token = jwt.sign({ id : newUser._id}, process.env.JWT_SECRET,{ expiresIn : "7d"});
 
         res.cookie("token" , token , {
             httpOnly:true,
@@ -48,18 +48,19 @@ export const SignUp  = async (req , res)=>{
         });
 
         res.status(201).json({
-            success:true,
+            success: true,
             message: "User Created Successfully",
-            user:{
+            token: token, 
+            user: {
                 _id : newUser._id,
                 email : newUser.email,
                 wallet_balance : newUser.wallet_balance,
-                name:newUser.name
+                name: newUser.name,
+                token: token 
             }
-        })
-
+        });
         
-    }catch(err){
+    } catch(err){
         res.status(500).json({
             success:false,
             message: `Error in SignUp controller and the error is :${err.message}`
@@ -99,22 +100,25 @@ export const login = async(req , res)=>{
         }
 
         const token = jwt.sign({id: user._id}, process.env.JWT_SECRET, {expiresIn : "7d"});
-        res.cookie("token", token,{
+        
+        res.cookie("token", token, {
             httpOnly: true,
             sameSite : "strict"
         });
 
+        
         res.status(200).json({
-            success:true,
-            user :{
+            success: true,
+            token: token, 
+            user: {
                 _id: user._id,
-                email : email,
-                name : user.name,
-                token: token
+                email: email,
+                name: user.name,
+                token: token 
             }
-        })
+        });
 
-    }catch(err){
+    } catch(err){
         res.status(500).json({
             success:false,
             message : `Error occured in Login Controller and the error is :${err.message}`
@@ -132,23 +136,20 @@ export const getMe = async (req , res)=>{
 
 
 
-export const logout = async(req , res)=>{
-    try{
+export const logout = async (req, res) => {
+  try {
+    // Overwrite the token with an empty string and expire it immediately
+    res.cookie("token", "", {
+      httpOnly: true,
+      sameSite: "strict",
+      expires: new Date(0), // Sets expiration to the past
+    });
 
-        res.clearCookie("token");
-
-        return res.status(200).json({
-            success:true,
-            message : "User logged out successfully "
-        });
-
-
-    }catch(err){
-        console.log('Not able to logout due to :' , err.message);
-        return res.status(500).json({
-            success:false,
-            message : "Not able to Logout "
-        })
-    }
-}
-
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully"
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

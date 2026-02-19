@@ -15,7 +15,8 @@ const portfolioSchema = new mongoose.Schema({
   realizedPnL: {
     type: Number,
     default: 0
-  }
+  },
+  totalRealizedPnl: { type: Number, default: 0 }
 }, { timestamps: true });
 
 

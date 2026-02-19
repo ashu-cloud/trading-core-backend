@@ -20,7 +20,8 @@ const stockSchema = new mongoose.Schema({
         type : Boolean,
         default :false
 
-    }
+    },
+    price: { type: Number, default: 0 }
 }, { timestamps : true })
 
 const Stock = mongoose.model("Stock" , stockSchema);

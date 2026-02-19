@@ -4,53 +4,69 @@ import { fetchStockPrice } from "../utils/marketData.js";
 export const getPortfolio = async (req, res) => {
   try {
     const userId = req.user._id;
-
     const portfolio = await Portfolio.findOne({ user: userId });
 
     if (!portfolio) {
       return res.status(200).json({
         success: true,
         holdings: [],
-        totalUnrealizedPnl: 0
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0 // Added for Dashboard consistency
       });
     }
 
     let totalUnrealizedPnl = 0;
+    let totalRealizedPnl = 0; // Track total realized profit
 
     const enrichedHoldings = await Promise.all(
       portfolio.holding.map(async (h) => {
-        const currentPrice = await fetchStockPrice(h.stockSymbol);
-        const unrealizedPnl =
-          (currentPrice - h.avgPrice) * h.quantity;
+        try {
+          // 1. SAFETY WRAP: If fetchStockPrice fails, we catch it locally
+          const currentPrice = await fetchStockPrice(h.stockSymbol).catch(() => 0);
+          
+          const unrealizedPnl = (currentPrice - h.avgPrice) * h.quantity;
+          
+          // Accumulate totals
+          totalUnrealizedPnl += unrealizedPnl;
+          totalRealizedPnl += (h.realizedPnl || 0);
 
-        totalUnrealizedPnl += unrealizedPnl;
-
-        return {
-          stockSymbol: h.stockSymbol,
-          quantity: h.quantity,
-          avgPrice: h.avgPrice,
-          currentPrice,
-          unrealizedPnl,
-          realizedPnl: h.realizedPnl
-        };
+          return {
+            stockSymbol: h.stockSymbol,
+            quantity: h.quantity,
+            avgPrice: h.avgPrice,
+            currentPrice,
+            unrealizedPnl,
+            realizedPnl: h.realizedPnl || 0
+          };
+        } catch (innerErr) {
+          // If a single stock calculation fails, return a partial object instead of crashing
+          return {
+            stockSymbol: h.stockSymbol,
+            quantity: h.quantity,
+            avgPrice: h.avgPrice,
+            currentPrice: 0,
+            unrealizedPnl: 0,
+            realizedPnl: h.realizedPnl || 0
+          };
+        }
       })
     );
 
     res.status(200).json({
       success: true,
       holdings: enrichedHoldings,
-      totalUnrealizedPnl
+      totalUnrealizedPnl,
+      totalRealizedPnl // ✅ Now the Dashboard can see the real sum
     });
 
   } catch (err) {
-    console.error("GetPortfolio error:", err.message);
+    console.error("GetPortfolio Critical Error:", err.message);
     res.status(500).json({
       success: false,
-      message: "Unable to fetch portfolio"
+      message: "Internal server error during portfolio calculation"
     });
   }
 };
-
 
 export const getPortfolioAllocation = async (req, res) => {
   try {

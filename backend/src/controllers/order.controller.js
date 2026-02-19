@@ -3,10 +3,8 @@ import Order from "../models/order.model.js";
 import User from "../models/user.model.js";
 import Portfolio from "../models/portfolio.model.js";
 import { fetchStockPrice } from "../utils/marketData.js";
-import { executeBuyOrder } from "../utils/orderExecution.js";
 
 /* ================= GET USER ORDERS ================= */
-
 export const getUserOrders = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -40,9 +38,7 @@ export const getUserOrders = async (req, res) => {
   }
 };
 
-
 /* ================= PLACE BUY ORDER ================= */
-
 export const placeUserOrder = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -75,7 +71,7 @@ export const placeUserOrder = async (req, res) => {
       });
     }
 
-    // 1️⃣ Create OPEN order
+    // 1. Create OPEN order
     const order = await Order.create({
       userId,
       stockSymbol,
@@ -91,7 +87,7 @@ export const placeUserOrder = async (req, res) => {
       }]
     });
 
-    // 2️⃣ Block funds (deduct for now)
+    // 2. Block funds
     user.wallet_balance -= orderValue;
     await user.save();
 
@@ -110,9 +106,7 @@ export const placeUserOrder = async (req, res) => {
   }
 };
 
-
 /* ================= PLACE SELL ORDER ================= */
-
 export const placeSellOrder = async (req, res) => {
   const session = await mongoose.startSession();
 
@@ -156,10 +150,10 @@ export const placeSellOrder = async (req, res) => {
     const price = await fetchStockPrice(stockSymbol);
     const sellValue = price * quantity;
 
-    const realizedPnL = (price - holding.avgPrice) * quantity;
+    // ✅ CALCULATION: (Current Sell Price - Original Avg Buy Price) * Quantity
+    const tradePnL = (price - holding.avgPrice) * quantity;
 
-
-    // 1️⃣ Create SELL order (FILLED)
+    // 1. Create SELL order (FILLED)
     const order = await Order.create([{
       userId,
       stockSymbol,
@@ -175,8 +169,14 @@ export const placeSellOrder = async (req, res) => {
       }]
     }], { session });
 
-    // 2️⃣ Update portfolio
+    // 2. Update portfolio holdings
     holding.quantity -= quantity;
+
+    // ✅ PERSISTENCE: Save to 'totalRealizedPnl' so it shows on Dashboard
+    if (portfolio.totalRealizedPnl === undefined) {
+      portfolio.totalRealizedPnl = 0;
+    }
+    portfolio.totalRealizedPnl += tradePnL;
 
     if (holding.quantity === 0) {
       portfolio.holding = portfolio.holding.filter(
@@ -186,7 +186,7 @@ export const placeSellOrder = async (req, res) => {
 
     await portfolio.save({ session });
 
-    // 3️⃣ Credit wallet
+    // 3. Credit wallet
     const user = await User.findById(userId).session(session);
     user.wallet_balance += sellValue;
     await user.save({ session });
@@ -198,7 +198,7 @@ export const placeSellOrder = async (req, res) => {
       message: "Sell order executed",
       orderId: order[0]._id,
       amountCredited: sellValue,
-      realizedPnL
+      realizedPnL: tradePnL // Returns individual trade PnL for UI feedback
     });
 
   } catch (err) {
@@ -214,9 +214,7 @@ export const placeSellOrder = async (req, res) => {
   }
 };
 
-
 /* ================= CANCEL ORDER ================= */
-
 export const cancelUserOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.orderId);
@@ -224,6 +222,7 @@ export const cancelUserOrder = async (req, res) => {
     if (!order || order.userId.toString() !== req.user._id.toString()) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
+    
     if (order.status !== "OPEN") {
       return res.status(400).json({
         success: false,
@@ -231,12 +230,7 @@ export const cancelUserOrder = async (req, res) => {
       });
     } 
 
-
-    if (order.status === "FILLED") {
-      return res.status(400).json({ success: false, message: "Cannot cancel filled order" });
-    }
-
-    const refundableQty = order.quantity - order.filledQuantity;
+    const refundableQty = order.quantity - (order.filledQuantity || 0);
     const refund = refundableQty * order.price;
 
     const user = await User.findById(order.userId);
@@ -245,12 +239,11 @@ export const cancelUserOrder = async (req, res) => {
 
     order.status = "CANCELLED";
     order.auditLogs.push({
-    action: "CANCELLED",
-    quantity: order.quantity - order.filledQuantity,
-    price: order.price
+      action: "CANCELLED",
+      quantity: refundableQty,
+      price: order.price
     });
     await order.save();
-
 
     res.status(200).json({ success: true, message: "Order cancelled" });
 
@@ -259,9 +252,7 @@ export const cancelUserOrder = async (req, res) => {
   }
 };
 
-
-
-// Execute Order
+/* ================= EXECUTE OPEN BUY ORDER ================= */
 export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
   const session = await mongoose.startSession();
 
@@ -273,18 +264,8 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
 
     const order = await Order.findById(orderId).session(session);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found"
-      });
-    }
-
-    if (order.userId.toString() !== userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized"
-      });
+    if (!order || order.userId.toString() !== userId.toString()) {
+      return res.status(404).json({ success: false, message: "Order not found" });
     }
 
     if (order.status !== "OPEN") {
@@ -294,12 +275,11 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
       });
     }
 
-    // 1️⃣ Update portfolio
     let portfolio = await Portfolio.findOne({ user: userId }).session(session);
 
     if (!portfolio) {
       portfolio = await Portfolio.create(
-        [{ user: userId, holding: [] }],
+        [{ user: userId, holding: [], totalRealizedPnl: 0 }],
         { session }
       );
       portfolio = portfolio[0];
@@ -310,6 +290,7 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
     );
 
     if (holding) {
+      // ✅ Adjust Average Price for the new position
       const totalQty = holding.quantity + order.quantity;
       const totalCost =
         holding.quantity * holding.avgPrice +
@@ -328,7 +309,6 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
 
     await portfolio.save({ session });
 
-    // 2️⃣ Mark order FILLED
     order.status = "FILLED";
     order.auditLogs.push({
       action: "FILLED",
@@ -338,7 +318,6 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
     });
 
     await order.save({ session });
-
     await session.commitTransaction();
 
     res.status(200).json({
@@ -349,13 +328,8 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error("Execute BUY error:", err.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Order execution failed"
-    });
+    res.status(500).json({ success: false, message: "Order execution failed" });
   } finally {
     session.endSession();
   }
 };
- 

@@ -6,20 +6,26 @@ export const getStockPrice = async (req, res) => {
     const { symbol } = req.params;
 
     if (!symbol) {
-      return res.status(400).json({
-        success: false,
-        message: "Stock symbol is required"
-      });
+      return res.status(400).json({ success: false, message: "Stock symbol is required" });
     }
 
     const upperSymbol = symbol.toUpperCase();
-    const price = await fetchStockPrice(upperSymbol);
+    
+    // Wrap fetch in try-catch to handle Finnhub errors specifically
+    let price;
+    try {
+      price = await fetchStockPrice(upperSymbol);
+    } catch (error) {
+      // If Finnhub fails or symbol invalid, return 404 (Not Found)
+      // This prevents the 500 "Service Unavailable" error on frontend
+      return res.status(404).json({ 
+        success: false, 
+        message: "Symbol not found or market data unavailable" 
+      });
+    }
 
     if (!Number.isFinite(price) || price <= 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Stock price not available"
-      });
+      return res.status(404).json({ success: false, message: "Price unavailable" });
     }
 
     res.status(200).json({
@@ -29,56 +35,60 @@ export const getStockPrice = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("getStockPrice error:", err.message);
-
+    console.error("getStockPrice Critical Error:", err.message);
+    // Only return 500 for actual server crashes
     res.status(500).json({
       success: false,
-      message:` Failed to fetch stock price ${err.message}`
+      message: `Internal Server Error: ${err.message}`
     });
   }
 };
 
 
-
-
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const getAllStocks = async (req, res) => {
   try {
     const exchange = req.query.exchange || "US";
-    const limit = Number(req.query.limit) || 100;
+    const limit = Number(req.query.limit) || 20;
+    const page = Number(req.query.page) || 1;
+    const skip = (page - 1) * limit;
 
-    const stocks = await fetchAllStocks(exchange);
+    const allStocks = await fetchAllStocks(exchange);
+    const filteredStocks = allStocks.filter(s => s.mic === "XNGS" || s.mic === "XNYS");
+    const pageItems = filteredStocks.slice(skip, skip + limit);
 
-    if (!stocks || stocks.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No stocks available"
-      });
+    // ✅ 2. Replace Promise.all with a sequential loop
+    const stocksWithPrices = [];
+    
+    for (const stock of pageItems) {
+      try {
+        const price = await fetchStockPrice(stock.symbol);
+        stocksWithPrices.push({
+          symbol: stock.symbol,
+          description: stock.description || stock.displaySymbol,
+          price: price
+        });
+      } catch (err) {
+        // Log the actual error so you can see if it's a 429 (Rate Limit) or 404 (Not Found)
+        console.error(`Failed to fetch ${stock.symbol}:`, err.message);
+        stocksWithPrices.push({ ...stock, price: 0 });
+      }
+      
+      // ✅ 3. Add a 100-millisecond pause between each API call
+      // This spreads 20 requests over 2 seconds, keeping you under the burst limit!
+      await sleep(100); 
     }
-
-    const formattedStocks = stocks
-      .slice(0, limit)
-      .map(stock => ({
-        symbol: stock.symbol,
-        description: stock.description,
-        exchange: stock.exchange
-      }));
 
     res.status(200).json({
       success: true,
-      count: formattedStocks.length,
-      stocks: formattedStocks
+      page,
+      total: filteredStocks.length,
+      stocks: stocksWithPrices,
     });
-
-  } 
-  catch (err) {
-    console.error("getAllStocks error:", err.message);
-
-    res.status(500).json({
-      success: false,
-      message: `Failed to fetch available stocks ${err.message}`
-    });
-}
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };
 
 
