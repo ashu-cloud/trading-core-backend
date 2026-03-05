@@ -8,7 +8,7 @@ const marketRouter = express.Router();
 
 marketRouter.use(marketLimiter);
 
-marketRouter.get("/stocks" , getAllStocks);
+marketRouter.get("/stocks" , protect, getAllStocks);
 
 marketRouter.get("/price/:symbol", protect,getStockPrice);
 

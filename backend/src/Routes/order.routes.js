@@ -1,34 +1,38 @@
 import express from 'express';
-import {getUserOrders , cancelUserOrder , placeUserOrder, placeSellOrder, executeBuyOrderAndUpdatePortfolio} from '../controllers/order.controller.js';
-import {protect} from '../middlewares/auth.middleware.js';
+import { getUserOrders, cancelUserOrder, placeUserOrder, placeSellOrder, executeBuyOrderAndUpdatePortfolio } from '../controllers/order.controller.js';
+import { protect } from '../middlewares/auth.middleware.js';
 import Order from '../models/order.model.js';
 
 const orderRouter = express.Router();
 
 orderRouter.post('/buy', protect, placeUserOrder);
 
-orderRouter.post('/sell' ,protect ,placeSellOrder);
+orderRouter.post('/sell', protect, placeSellOrder);
 
-orderRouter.get('/my',protect ,getUserOrders);
+orderRouter.get('/my', protect, getUserOrders);
 
-orderRouter.delete('/:orderId', protect,cancelUserOrder);
+orderRouter.delete('/:orderId', protect, cancelUserOrder);
 
-orderRouter.get('/:orderId/logs', protect, async (req, res) => {
-  const order = await Order.findById(req.params.orderId)
-    .select('auditLogs');
+orderRouter.get('/:orderId/logs', protect, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.orderId)
+      .select('auditLogs');
 
-  if (!order) {
-    return res.status(404).json({ success: false });
+    if (!order) {
+      return res.status(404).json({ success: false });
+    }
+
+    res.json({
+      success: true,
+      auditLogs: order.auditLogs
+    });
+  } catch (err) {
+    next(err);
   }
-
-  res.json({
-    success: true,
-    auditLogs: order.auditLogs
-  });
 });
 
 
-orderRouter.post('/execute/:orderId', protect,executeBuyOrderAndUpdatePortfolio)
+orderRouter.post('/execute/:orderId', protect, executeBuyOrderAndUpdatePortfolio)
 
 
 

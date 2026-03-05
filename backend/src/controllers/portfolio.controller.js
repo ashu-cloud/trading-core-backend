@@ -16,7 +16,6 @@ export const getPortfolio = async (req, res) => {
     }
 
     let totalUnrealizedPnl = 0;
-    let totalRealizedPnl = 0; // Track total realized profit
 
     const enrichedHoldings = await Promise.all(
       portfolio.holding.map(async (h) => {
@@ -28,7 +27,6 @@ export const getPortfolio = async (req, res) => {
           
           // Accumulate totals
           totalUnrealizedPnl += unrealizedPnl;
-          totalRealizedPnl += (h.realizedPnl || 0);
 
           return {
             stockSymbol: h.stockSymbol,
@@ -56,7 +54,7 @@ export const getPortfolio = async (req, res) => {
       success: true,
       holdings: enrichedHoldings,
       totalUnrealizedPnl,
-      totalRealizedPnl // ✅ Now the Dashboard can see the real sum
+      totalRealizedPnl: portfolio.totalRealizedPnl || 0
     });
 
   } catch (err) {

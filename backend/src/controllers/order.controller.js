@@ -40,31 +40,36 @@ export const getUserOrders = async (req, res) => {
 
 /* ================= PLACE BUY ORDER ================= */
 export const placeUserOrder = async (req, res) => {
+  const userId = req.user._id;
+  const { symbol, quantity } = req.body;
+
+  if (!symbol || !quantity || quantity <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid symbol or quantity"
+    });
+  }
+
+  const stockSymbol = symbol.toUpperCase();
+  const price = await fetchStockPrice(stockSymbol);
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid stock price"
+    });
+  }
+
+  const orderValue = price * quantity;
+
+  const session = await mongoose.startSession();
+
   try {
-    const userId = req.user._id;
-    const { symbol, quantity } = req.body;
+    session.startTransaction();
 
-    if (!symbol || !quantity || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid symbol or quantity"
-      });
-    }
-
-    const stockSymbol = symbol.toUpperCase();
-    const price = await fetchStockPrice(stockSymbol);
-
-    if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid stock price"
-      });
-    }
-
-    const orderValue = price * quantity;
-
-    const user = await User.findById(userId);
-    if (user.wallet_balance < orderValue) {
+    const user = await User.findById(userId).session(session);
+    if (!user || user.wallet_balance < orderValue) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Insufficient wallet balance"
@@ -72,7 +77,7 @@ export const placeUserOrder = async (req, res) => {
     }
 
     // 1. Create OPEN order
-    const order = await Order.create({
+    const order = await Order.create([{
       userId,
       stockSymbol,
       quantity,
@@ -85,51 +90,72 @@ export const placeUserOrder = async (req, res) => {
         price,
         timestamp: new Date()
       }]
-    });
+    }], { session });
 
     // 2. Block funds
     user.wallet_balance -= orderValue;
-    await user.save();
+    await user.save({ session });
+
+    await session.commitTransaction();
 
     res.status(201).json({
       success: true,
       message: "Buy order placed (OPEN)",
-      orderId: order._id
+      orderId: order[0]._id
     });
 
   } catch (err) {
+    await session.abortTransaction();
     console.error("Place BUY error:", err.message);
     res.status(500).json({
       success: false,
       message: "Unable to place buy order"
     });
+  } finally {
+    session.endSession();
   }
 };
 
 /* ================= PLACE SELL ORDER ================= */
 export const placeSellOrder = async (req, res) => {
+  const userId = req.user._id;
+  const { symbol, quantity, price: userPrice } = req.body;
+
+  if (!symbol || !quantity || quantity <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid symbol or quantity"
+    });
+  }
+
+  const stockSymbol = symbol.toUpperCase();
+
+  // Use user-provided limit price if valid, otherwise fetch live market price
+  let price;
+  if (userPrice && Number.isFinite(Number(userPrice)) && Number(userPrice) > 0) {
+    price = Number(userPrice);
+  } else {
+    price = await fetchStockPrice(stockSymbol);
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid stock price"
+    });
+  }
+
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
-
-    const userId = req.user._id;
-    const { symbol, quantity } = req.body;
-
-    if (!symbol || !quantity || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid symbol or quantity"
-      });
-    }
-
-    const stockSymbol = symbol.toUpperCase();
 
     const portfolio = await Portfolio
       .findOne({ user: userId })
       .session(session);
 
     if (!portfolio) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "No holdings found"
@@ -141,16 +167,16 @@ export const placeSellOrder = async (req, res) => {
     );
 
     if (!holding || holding.quantity < quantity) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Insufficient holdings"
       });
     }
 
-    const price = await fetchStockPrice(stockSymbol);
     const sellValue = price * quantity;
 
-    // ✅ CALCULATION: (Current Sell Price - Original Avg Buy Price) * Quantity
+    // CALCULATION: (Sell Price - Original Avg Buy Price) * Quantity
     const tradePnL = (price - holding.avgPrice) * quantity;
 
     // 1. Create SELL order (FILLED)
@@ -172,11 +198,12 @@ export const placeSellOrder = async (req, res) => {
     // 2. Update portfolio holdings
     holding.quantity -= quantity;
 
-    // ✅ PERSISTENCE: Save to 'totalRealizedPnl' so it shows on Dashboard
-    if (portfolio.totalRealizedPnl === undefined) {
+    // PERSISTENCE: Accumulate into totalRealizedPnl
+    if (portfolio.totalRealizedPnl === undefined || portfolio.totalRealizedPnl === null) {
       portfolio.totalRealizedPnl = 0;
     }
     portfolio.totalRealizedPnl += tradePnL;
+    portfolio.markModified('totalRealizedPnl');
 
     if (holding.quantity === 0) {
       portfolio.holding = portfolio.holding.filter(
@@ -198,7 +225,7 @@ export const placeSellOrder = async (req, res) => {
       message: "Sell order executed",
       orderId: order[0]._id,
       amountCredited: sellValue,
-      realizedPnL: tradePnL // Returns individual trade PnL for UI feedback
+      realizedPnL: tradePnL
     });
 
   } catch (err) {
@@ -216,26 +243,30 @@ export const placeSellOrder = async (req, res) => {
 
 /* ================= CANCEL ORDER ================= */
 export const cancelUserOrder = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.orderId);
+  const session = await mongoose.startSession();
 
-    if (!order || order.userId.toString() !== req.user._id.toString()) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+  try {
+    session.startTransaction();
+
+    const order = await Order.findOne({
+      _id: req.params.orderId,
+      userId: req.user._id,
+      status: "OPEN"
+    }).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Order not found or not cancellable" });
     }
-    
-    if (order.status !== "OPEN") {
-      return res.status(400).json({
-        success: false,
-        message: "Only OPEN orders can be cancelled"
-      });
-    } 
 
     const refundableQty = order.quantity - (order.filledQuantity || 0);
     const refund = refundableQty * order.price;
 
-    const user = await User.findById(order.userId);
-    user.wallet_balance += refund;
-    await user.save();
+    await User.findByIdAndUpdate(
+      order.userId,
+      { $inc: { wallet_balance: refund } },
+      { session }
+    );
 
     order.status = "CANCELLED";
     order.auditLogs.push({
@@ -243,12 +274,17 @@ export const cancelUserOrder = async (req, res) => {
       quantity: refundableQty,
       price: order.price
     });
-    await order.save();
+    await order.save({ session });
 
+    await session.commitTransaction();
     res.status(200).json({ success: true, message: "Order cancelled" });
 
   } catch (err) {
+    await session.abortTransaction();
+    console.error("Cancel Order Error:", err.message);
     res.status(500).json({ success: false, message: "Cancel failed" });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -265,10 +301,12 @@ export const executeBuyOrderAndUpdatePortfolio = async (req, res) => {
     const order = await Order.findById(orderId).session(session);
 
     if (!order || order.userId.toString() !== userId.toString()) {
+      await session.abortTransaction();
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
     if (order.status !== "OPEN") {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Order cannot be executed"

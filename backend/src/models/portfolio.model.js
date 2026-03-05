@@ -10,12 +10,9 @@ const portfolioSchema = new mongoose.Schema({
   holding: [{
     stockSymbol: String,
     quantity: Number,
-    avgPrice: Number
+    avgPrice: Number,
+    realizedPnl: { type: Number, default: 0 }
   }],
-  realizedPnL: {
-    type: Number,
-    default: 0
-  },
   totalRealizedPnl: { type: Number, default: 0 }
 }, { timestamps: true });
 
