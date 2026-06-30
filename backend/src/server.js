@@ -10,12 +10,13 @@ import marketRouter from '../src/Routes/market.router.js';
 import orderRouter from '../src/Routes/order.routes.js';
 import connectDB from '../src/utils/db.js';
 import { errorHandler } from '../src/middlewares/error.middleware.js';
+import paymentRouter from '../src/Routes/payments.routes.js'
 
 const app = express();
 
 // --- FIX 1: HANDLE EMPTY PORT STRING ---
 // We use Number() to convert "" to 0, which makes the || 5000 fallback work
-const PORT = Number(process.env.PORT) || 5000; 
+const PORT = Number(process.env.PORT) || 5000;
 
 // Connect DB;
 await connectDB();
@@ -23,23 +24,25 @@ await connectDB();
 // --- FIX 2: CORS CONFIGURATION ---
 app.use(cors({
   origin: [
-    "https://trading-core-frontend.onrender.com" 
-  ], 
+    "https://trading-core-frontend.onrender.com"
+  ],
   credentials: true,               // Essential for cookies
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"]
+
 }));
 
 app.use(express.json());
-app.use(express.urlencoded({extended : true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/market', marketRouter);
-app.use('/api/order' , orderRouter); 
+app.use('/api/order', orderRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/user/wallet', walletRouter);
+app.use('/api/user/payments', paymentRouter);
 
 app.get('/', (req, res) => {
   res.send('Trading Core Backend is up and running!');
@@ -47,6 +50,6 @@ app.get('/', (req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT , ()=>{
-    console.log(`app running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`app running on port ${PORT}`);
 })
