@@ -55,6 +55,11 @@ const orderSchema = new mongoose.Schema({
     isDeleted: {
     type: Boolean,
     default: false
+    },
+    idempotencyKey: {
+        type: String,
+        unique: true,
+        sparse: true
     }
 
 },{ timestamps : true});

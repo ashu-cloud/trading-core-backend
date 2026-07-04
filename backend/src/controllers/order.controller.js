@@ -42,6 +42,14 @@ export const getUserOrders = async (req, res) => {
 export const placeUserOrder = async (req, res) => {
   const userId = req.user._id;
   const { symbol, quantity } = req.body;
+  const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotencyKey;
+
+  if (!idempotencyKey) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing idempotency key. Please provide it in the 'Idempotency-Key' header or in the request body."
+    });
+  }
 
   if (!symbol || !quantity || quantity <= 0) {
     return res.status(400).json({
@@ -84,6 +92,7 @@ export const placeUserOrder = async (req, res) => {
       price,
       type: "BUY",
       status: "OPEN",
+      idempotencyKey,
       auditLogs: [{
         action: "CREATED",
         quantity,
@@ -106,6 +115,23 @@ export const placeUserOrder = async (req, res) => {
 
   } catch (err) {
     await session.abortTransaction();
+
+    // Check if duplicate key error on idempotencyKey
+    if (err.code === 11000) {
+      try {
+        const existingOrder = await Order.findOne({ idempotencyKey });
+        if (existingOrder) {
+          return res.status(200).json({
+            success: true,
+            message: "Buy order placed (OPEN) - Duplicate request, returning original result.",
+            orderId: existingOrder._id
+          });
+        }
+      } catch (findErr) {
+        console.error("Error finding existing buy order:", findErr.message);
+      }
+    }
+
     console.error("Place BUY error:", err.message);
     res.status(500).json({
       success: false,
@@ -120,6 +146,14 @@ export const placeUserOrder = async (req, res) => {
 export const placeSellOrder = async (req, res) => {
   const userId = req.user._id;
   const { symbol, quantity, price: userPrice } = req.body;
+  const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotencyKey;
+
+  if (!idempotencyKey) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing idempotency key. Please provide it in the 'Idempotency-Key' header or in the request body."
+    });
+  }
 
   if (!symbol || !quantity || quantity <= 0) {
     return res.status(400).json({
@@ -188,6 +222,7 @@ export const placeSellOrder = async (req, res) => {
       type: "SELL",
       status: "FILLED",
       filledQuantity: quantity,
+      idempotencyKey,
       auditLogs: [{
         action: "FILLED",
         quantity,
@@ -230,6 +265,25 @@ export const placeSellOrder = async (req, res) => {
 
   } catch (err) {
     await session.abortTransaction();
+
+    // Check if duplicate key error on idempotencyKey
+    if (err.code === 11000) {
+      try {
+        const existingOrder = await Order.findOne({ idempotencyKey });
+        if (existingOrder) {
+          return res.status(200).json({
+            success: true,
+            message: "Sell order executed - Duplicate request, returning original result.",
+            orderId: existingOrder._id,
+            amountCredited: existingOrder.price * existingOrder.quantity,
+            realizedPnL: 0
+          });
+        }
+      } catch (findErr) {
+        console.error("Error finding existing sell order:", findErr.message);
+      }
+    }
+
     console.error("Sell Order Error:", err.message);
 
     res.status(500).json({
